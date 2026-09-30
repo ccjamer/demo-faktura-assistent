@@ -1,0 +1,134 @@
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unikiq DMA – Live Faktura Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col items-center p-4 sm:p-6">
+
+    <!-- Header -->
+    <div class="max-w-2xl w-full text-center my-6">
+        <h1 class="text-3xl font-extrabold text-blue-400">Unikiq Digitale Medarbejdere</h1>
+        <p class="text-slate-400 text-sm mt-1">Live Demo: Fra rå mekanikernote til færdig fakturaklade i e-conomic</p>
+    </div>
+
+    <!-- Main Container -->
+    <div class="max-w-2xl w-full bg-slate-800 rounded-2xl shadow-xl border border-slate-700 p-6 space-y-6">
+        
+        <!-- Quick Fill Buttons -->
+        <div>
+            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Test med hurtige eksempler:</label>
+            <div class="flex flex-wrap gap-2">
+                <button onclick="setNote('Golf VII - skift bærarm h.f., skift bremser foran, 2.5t, 1L olie.')" class="bg-slate-700 hover:bg-slate-600 text-xs text-slate-200 py-1.5 px-3 rounded-lg border border-slate-600 transition">🚗 Auto (Mekaniker)</button>
+                <button onclick="setNote('Spartling og maling af 45m2 væg, 2 lag, hvid glans 5. Tidsforbrug 6t.')" class="bg-slate-700 hover:bg-slate-600 text-xs text-slate-200 py-1.5 px-3 rounded-lg border border-slate-600 transition">🎨 Maler</button>
+                <button onclick="setNote('Udskiftning af 2 stk Velux vinduer + inddækning, 5.5 timer. 1x tætningsbånd.')" class="bg-slate-700 hover:bg-slate-600 text-xs text-slate-200 py-1.5 px-3 rounded-lg border border-slate-600 transition">🔨 Tømrer</button>
+            </div>
+        </div>
+
+        <!-- Input Form -->
+        <div class="space-y-3">
+            <label for="noteInput" class="block text-sm font-medium text-slate-300">Indtast rå arbejdsnote (eller indtal):</label>
+            <textarea id="noteInput" rows="3" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder-slate-500" placeholder="Skriv din note her..."></textarea>
+            
+            <button id="submitBtn" onclick="sendToN8n()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 px-4 rounded-xl shadow-lg transition flex items-center justify-center gap-2">
+                <span>Generer Fakturaklade</span>
+            </button>
+        </div>
+
+        <!-- Loading Spinner (Hidden by default) -->
+        <div id="loading" class="hidden text-center py-6">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
+            <p class="text-xs text-slate-400 mt-2">Unikiq DMA behandler noten & slår op i kodesystemet...</p>
+        </div>
+
+        <!-- Output Preview (Invoice Card) -->
+        <div id="invoiceCard" class="hidden bg-slate-900 border border-slate-700 rounded-xl p-5 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <div>
+                    <span class="text-xs text-blue-400 font-semibold uppercase tracking-wider">Fakturaklade Genereret</span>
+                    <h2 class="text-lg font-bold text-white">e-conomic Status: Ready</h2>
+                </div>
+                <span class="bg-emerald-500/10 text-emerald-400 text-xs px-2.5 py-1 rounded-full font-medium border border-emerald-500/20">Klar til godkendelse</span>
+            </div>
+
+            <!-- JSON/Table Data Container -->
+            <div id="invoiceContent" class="text-sm space-y-2 text-slate-300">
+                <!-- Dynamisk indhold sættes her via JS -->
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // SÆT DIN N8N WEBHOOK URL HER (Kobl op til din n8n instans)
+        const N8N_WEBHOOK_URL = 'https://n8n.unikiq.dk/webhook/demo-faktura';
+
+        function setNote(text) {
+            document.getElementById('noteInput').value = text;
+        }
+
+        async function sendToN8n() {
+            const note = document.getElementById('noteInput').value;
+            if (!note) return alert('Indtast venligst en note først!');
+
+            // UI states
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('invoiceCard').classList.add('hidden');
+
+            try {
+                const response = await fetch(N8N_WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        client_id: 'demo_auto',
+                        raw_note: note 
+                    })
+                });
+
+                const data = await response.json();
+                
+                // Opdater UI med svaret fra n8n
+                renderInvoice(data);
+
+            } catch (err) {
+                alert('Fejl ved forbindelse til n8n. Tjek konsollen eller webhook URL.');
+                console.error(err);
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
+            }
+        }
+
+        function renderInvoice(data) {
+            const container = document.getElementById('invoiceContent');
+            
+            // Forventer et JSON format fra n8n med f.eks. items, description osv.
+            let html = `<p class="italic text-slate-400 mb-3">"${data.summary_description || 'Oversat af Unikiq DMA'}"</p>`;
+            html += `<table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="text-slate-500 border-b border-slate-800">
+                                <th class="py-1">Kode</th>
+                                <th class="py-1">Beskrivelse</th>
+                                <th class="py-1 text-right">Antal/Timer</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+
+            if(data.line_items) {
+                data.line_items.forEach(item => {
+                    html += `<tr class="border-b border-slate-800/50">
+                                <td class="py-2 text-blue-400 font-mono">${item.code}</td>
+                                <td class="py-2 text-slate-200">${item.description}</td>
+                                <td class="py-2 text-right text-slate-300">${item.qty}</td>
+                             </tr>`;
+                });
+            }
+
+            html += `</tbody></table>`;
+            
+            container.innerHTML = html;
+            document.getElementById('invoiceCard').classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
