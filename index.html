@@ -96,6 +96,7 @@
     </div>
 
     <script>
+        // Fuldstændig absolut URL til n8n webhook
         const N8N_WEBHOOK_URL = 'https://faktura-assistent.unikiq.dk/webhook/demo-faktura';
 
         function setNote(text) {
@@ -152,7 +153,7 @@
 
             function stopSpeechUI() {
                 isRecording = false;
-                micIcon.innerText = "🎙️️";
+                micIcon.innerText = "🎙️";
                 micText.innerText = "Start indtaling";
             }
 
@@ -173,13 +174,20 @@
             try {
                 const response = await fetch(N8N_WEBHOOK_URL, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
                     body: JSON.stringify({ 
                         client_id: 'demo_auto',
                         raw_note: note,
                         recipient_email: email || null
                     })
                 });
+
+                if (!response.ok) {
+                    throw new Error(`Serveren svarede med status ${response.status}`);
+                }
 
                 let rawData = await response.json();
                 renderInvoice(rawData);
@@ -189,7 +197,7 @@
                 }
 
             } catch (err) {
-                alert('Fejl ved forbindelse til faktura-assistenten. Tjek netværk eller server.');
+                alert('Kunne ikke forbinde til faktura-assistenten. Fejl: ' + err.message);
                 console.error(err);
             } finally {
                 document.getElementById('loading').classList.add('hidden');
@@ -200,7 +208,6 @@
         function renderInvoice(responseObj) {
             const container = document.getElementById('invoiceContent');
             
-            // Graver ned i dataerne uanset n8n-indpakningsformat
             let data = responseObj;
             if (data.output) data = data.output;
             if (Array.isArray(data)) data = data[0];
