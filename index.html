@@ -103,9 +103,11 @@
             document.getElementById('noteInput').value = text;
         }
 
-        // --- STEMMEINDTALING (Web Speech API) ---
+        // --- CONTINUOUS SPEECH-TO-TEXT LOGIK ---
         let recognition;
-        let isRecording = false;
+        let isUserStopping = false;
+        let baseText = "";       // Gemmer teksten fra før optagelsen startede
+        let finalTranscript = "";// Gemmer alle bekræftede sætninger under optagelsen
 
         function toggleSpeech() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -118,10 +120,17 @@
             const micText = document.getElementById('micText');
             const textarea = document.getElementById('noteInput');
 
-            if (isRecording) {
+            // Hvis brugeren trykker STOP
+            if (recognition && !isUserStopping) {
+                isUserStopping = true;
                 recognition.stop();
                 return;
             }
+
+            // Nulstil tilstande for ny optagelse
+            isUserStopping = false;
+            baseText = textarea.value ? textarea.value.trim() + " " : "";
+            finalTranscript = "";
 
             recognition = new SpeechRecognition();
             recognition.lang = 'da-DK';
@@ -129,30 +138,49 @@
             recognition.interimResults = true;
 
             recognition.onstart = () => {
-                isRecording = true;
                 micIcon.innerText = "🔴";
                 micText.innerText = "Optager... (tryk for stop)";
             };
 
             recognition.onresult = (event) => {
-                let transcript = '';
-                for (let i = event.resultIndex; i < event.results.length; i++) {
-                    transcript += event.results[i][0].transcript;
+                let interimTranscript = '';
+
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript + ' ';
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
                 }
-                textarea.value = transcript;
+
+                // Opdater tekstfeltet: Eksisterende tekst + Færdige sætninger + Midlertidige ord
+                textarea.value = baseText + finalTranscript + interimTranscript;
             };
 
             recognition.onerror = (e) => {
                 console.error("Speech error:", e);
-                stopSpeechUI();
+                if (e.error !== 'no-speech') {
+                    stopSpeechUI();
+                }
             };
 
             recognition.onend = () => {
-                stopSpeechUI();
+                // Hvis browseren lukkede forbindelsen automatisk, men brugeren IKKE har trykket stop:
+                if (!isUserStopping) {
+                    baseText = textarea.value ? textarea.value.trim() + " " : "";
+                    finalTranscript = "";
+                    try {
+                        recognition.start(); // Genstart automatisk
+                    } catch (err) {
+                        stopSpeechUI();
+                    }
+                } else {
+                    stopSpeechUI();
+                }
             };
 
             function stopSpeechUI() {
-                isRecording = false;
+                isUserStopping = true;
                 micIcon.innerText = "🎙️";
                 micText.innerText = "Start indtaling";
             }
@@ -179,18 +207,17 @@
                     body: JSON.stringify({ 
                         client_id: 'demo_auto',
                         raw_note: note,
+                        user_email: email || null,
                         recipient_email: email || null
                     })
                 });
 
                 const data = await response.json();
                 
-                // Vis mail badge hvis mail blev sendt
                 if (email) {
                     document.getElementById('emailSentBadge').classList.remove('hidden');
                 }
 
-                // Opdater UI med svaret fra n8n
                 renderInvoice(data);
 
             } catch (err) {
